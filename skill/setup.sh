@@ -14,6 +14,11 @@ echo "============================================"
 echo "  项目目录: $PROJECT_DIR"
 echo ""
 
+PIP_BIN="${PIP_BIN:-pip3}"
+if ! command -v "$PIP_BIN" &> /dev/null; then
+    PIP_BIN="python3 -m pip"
+fi
+
 # ─── 1. 检查 Python ──
 echo "[1/4] 检查 Python..."
 if ! command -v python3 &> /dev/null; then
@@ -38,12 +43,29 @@ CORE_DEPS=(
     "openai>=1.0.0"
 )
 
-pip3 install --quiet "${CORE_DEPS[@]}"
+if [[ "$PIP_BIN" == "python3 -m pip" ]]; then
+    python3 -m pip install --quiet "${CORE_DEPS[@]}"
+else
+    "$PIP_BIN" install --quiet "${CORE_DEPS[@]}"
+fi
 echo "  Python 依赖安装完成"
 
 # ─── 3. 安装 Playwright + Chromium ──
 echo ""
 echo "[3/4] 安装 Playwright Chromium 浏览器..."
+
+# Linux 服务器通常还需要系统级依赖，先尝试自动安装。
+if [[ "$(uname -s)" == "Linux" ]]; then
+    echo "  检测到 Linux，尝试安装 Playwright 系统依赖..."
+    if python3 -m playwright install-deps chromium; then
+        echo "  Playwright 系统依赖安装完成"
+    else
+        echo "  警告: Playwright 系统依赖未能自动安装"
+        echo "  如后续仍提示 playwright_chromium 缺失，请使用 root 手动执行："
+        echo "    python3 -m playwright install-deps chromium"
+    fi
+fi
+
 python3 -m playwright install chromium
 echo "  Playwright Chromium 安装完成"
 
@@ -68,3 +90,5 @@ python3 "$PROJECT_DIR/prism_cli.py" --check-deps
 
 echo ""
 echo "安装完成！你可以通过 /prism 命令使用了。"
+echo "如果仍提示 playwright_chromium 缺失，请重新执行："
+echo "  python3 -m playwright install chromium"

@@ -1,12 +1,14 @@
 ---
 name: prism
 description: Convert .docx documents to high-fidelity PPT presentations using AI. Supports multiple styles and both image-based and editable export modes.
-metadata: {"openclaw":{"emoji":"🎯","requires":{"bins":["python3"],"env":[]},"primaryEnv":"OPENAI_API_KEY","install":[{"id":"setup","kind":"download","label":"Run Prism setup script","url":"https://github.com/chuanmu6809/prism-openclaw-skill/releases/latest/download/setup.sh"}]}}
+metadata: {"openclaw":{"emoji":"🎯","requires":{"bins":["python3"],"env":[]},"install":[{"id":"setup","kind":"download","label":"Run Prism setup script","url":"https://github.com/chuanmu6809/prism-openclaw-skill/releases/latest/download/setup.sh"}]}}
 ---
 
 # Prism — AI PPT Generator
 
 Prism converts .docx files (exported from Feishu/Lark, Google Docs, or any word processor) into professional, high-fidelity PPT presentations using AI.
+
+默认情况下，Prism 优先使用当前 OpenClaw 宿主会话的大模型来完成布局规划与单页 HTML 生成；用户也可以改为配置自己的 OpenAI-compatible API。
 
 ## Installation Directory
 
@@ -23,11 +25,11 @@ Prism configuration is stored at `{baseDir}/prism_config.json`.
 When the user invokes `/prism config` or when config file doesn't exist, guide them through configuration:
 
 1. **API Configuration**: Ask the user:
-   > Prism 需要调用 LLM API 来生成 PPT 内容。请选择 API 配置方式：
-   > 1. **使用小龙虾当前的 API**（读取环境变量中的 OPENAI_API_KEY）— 推荐，无需额外配置
+   > Prism 需要模型来完成排版规划和 HTML 生成。请选择运行方式：
+   > 1. **使用当前龙虾会话的大模型** — 推荐，无需额外配置
    > 2. **为 Prism 单独配置 API**（需要提供 base_url、api_key、model）
 
-   - If option 1: set `api_mode` to `"openclaw"` in config. No extra env vars needed.
+   - If option 1: set `api_mode` to `"host"`.
    - If option 2: ask for `base_url`, `api_key`, and `model`, then save to config as `api_mode: "custom"`.
 
 2. **Default Style**: Ask the user to pick a default style:
@@ -40,7 +42,7 @@ When the user invokes `/prism config` or when config file doesn't exist, guide t
 3. Save the config to `{baseDir}/prism_config.json`:
    ```json
    {
-     "api_mode": "openclaw",
+     "api_mode": "host",
      "custom_api_key": "",
      "custom_base_url": "",
      "custom_model": "",
@@ -91,18 +93,79 @@ If the user hasn't specified a style in their message, and there's a `default_st
 
 ### Step 4: Run the conversion
 
-Load config from `{baseDir}/prism_config.json` and build the command:
+Load config from `{baseDir}/prism_config.json`.
 
-**If api_mode is "openclaw"** (uses the environment's OPENAI_API_KEY):
+#### Mode A: `api_mode = "host"` (recommended)
+
+Use the current OpenClaw conversation model for all reasoning steps, and only use Prism CLI for deterministic processing.
+
+1. Create work directories:
 ```bash
-python3 {baseDir}/../prism_cli.py \
-  --input "<path_to_docx>" \
-  --style "<style_name>" \
-  --export both \
-  --output-dir "/tmp/prism_output_$(date +%s)"
+mkdir -p "/tmp/prism_work_$(date +%s)"
+mkdir -p "/tmp/prism_output_$(date +%s)"
 ```
 
-**If api_mode is "custom"**:
+2. Parse the DOCX:
+```bash
+python3 {baseDir}/../prism_cli.py \
+  --parse-docx \
+  --input "<path_to_docx>" \
+  --work-dir "<work_dir>"
+```
+
+3. Emit the layout-planning prompt bundle:
+```bash
+python3 {baseDir}/../prism_cli.py \
+  --emit-layout-plan \
+  --work-dir "<work_dir>" \
+  --style "<style_name>" \
+  --prompt-output "<work_dir>/layout_prompt.json"
+```
+
+4. Read `<work_dir>/layout_prompt.json`, then use the **current host model** to answer it.
+   - Pass `system_prompt` as system instruction and `user_prompt` as user content.
+   - Save the model output as `<work_dir>/intents.json`.
+   - The content must be a JSON array like:
+   ```json
+   [{"page":1,"layout_intent":"..."},{"page":2,"layout_intent":"..."}]
+   ```
+   - For mixed-tone styles, each object should also include `contrast_affinity`.
+
+5. Generate each page HTML one by one:
+   - For page `N`, emit a prompt bundle:
+   ```bash
+   python3 {baseDir}/../prism_cli.py \
+     --emit-page-prompt \
+     --work-dir "<work_dir>" \
+     --style "<style_name>" \
+     --page N \
+     --intents-file "<work_dir>/intents.json" \
+     --prompt-output "<work_dir>/page_N_prompt.json"
+   ```
+   - Read `page_N_prompt.json`, use the **current host model** to answer it, and save the output HTML to the `output_path` field shown in the JSON.
+   - The model output must be exactly one `<section class="page-N">...</section>`.
+
+6. Assemble the full HTML:
+```bash
+python3 {baseDir}/../prism_cli.py \
+  --assemble-html \
+  --work-dir "<work_dir>" \
+  --style "<style_name>"
+```
+
+7. Export PPTX:
+```bash
+python3 {baseDir}/../prism_cli.py \
+  --export-from-workdir \
+  --work-dir "<work_dir>" \
+  --style "<style_name>" \
+  --export both \
+  --output-dir "<output_dir>"
+```
+
+#### Mode B: `api_mode = "custom"`
+
+Use Prism's built-in API client:
 ```bash
 python3 {baseDir}/../prism_cli.py \
   --input "<path_to_docx>" \
@@ -131,9 +194,9 @@ Send both files to the user with a brief explanation:
 
 ### Step 6: Cleanup
 
-After sending the files, clean up the temp output directory:
+After sending the files, clean up the temp work/output directories:
 ```bash
-rm -rf "<output_dir>"
+rm -rf "<output_dir>" "<work_dir>"
 ```
 
 ## Tool Commands Summary
@@ -164,10 +227,22 @@ If deps are missing:
 cd {baseDir}/.. && bash skill/setup.sh
 ```
 
+If the check still reports `playwright_chromium` missing, run:
+```bash
+python3 -m playwright install chromium
+```
+
+On Linux servers, if Chromium installation fails due to missing system libraries, run:
+```bash
+python3 -m playwright install-deps chromium
+python3 -m playwright install chromium
+```
+
 ## Error Handling
 
 - If the .docx has no H1 headings: Tell the user "文档中需要使用一级标题(H1)来分页，请检查文档格式"
-- If API call fails: Check if api_mode is correct, suggest running `/prism config`
+- If host-mode generation fails: inspect whether the current conversation model can follow long structured prompts and output valid HTML/JSON; if needed, retry page-by-page
+- If custom API call fails: Check if api_mode is correct, suggest running `/prism config`
 - If Playwright/Chromium missing: Run `python3 -m playwright install chromium`
 - If Python deps missing: Run `cd {baseDir}/.. && pip install -r requirements.txt`
 

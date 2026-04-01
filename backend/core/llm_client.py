@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 llm_client.py
 异步 LLM 调用，支持多页并发。使用 OpenAI 兼容协议。

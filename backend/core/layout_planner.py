@@ -102,11 +102,10 @@ def _fallback_intent(page: dict) -> str:
 
 # ─── AI 调用 ───────────────────────────────────────────────────────────────────
 
-def plan_layout(pages: list, style: dict) -> list:
+def build_layout_plan_prompts(pages: list, style: dict) -> tuple[str, str]:
     """
-    调用 AI 为所有页面规划布局意图。
-    返回：[{"page": N, "layout_intent": "...", "contrast_affinity": 0-2}, ...]
-    当 style 含 mixed=True 时，AI 会额外输出每页的反差适宜度评分。
+    构造布局规划所需的 system/user prompt。
+    供 CLI 的 host 模式和外部编排复用。
     """
     planner_cfg = _prompt_cfg["layout_planner"]
     style_name = style.get("name", "发布会暗色科技感")
@@ -114,7 +113,6 @@ def plan_layout(pages: list, style: dict) -> list:
 
     summaries = "\n".join(_build_page_summary(p) for p in pages)
 
-    # 构建 system prompt
     sys_lines = planner_cfg["system"]
     if isinstance(sys_lines, list):
         sys_content = "\n".join(sys_lines)
@@ -128,7 +126,6 @@ def plan_layout(pages: list, style: dict) -> list:
         else:
             sys_content += "\n" + mixed_lines
 
-    # 构建 user prompt
     tone_instruction = ""
     if is_mixed:
         tone_instruction = "\n此风格为【明暗混合】模式，请为每页输出 contrast_affinity 字段（0、1 或 2）。\n"
@@ -138,6 +135,51 @@ def plan_layout(pages: list, style: dict) -> list:
         tone_instruction=tone_instruction,
         page_summaries=summaries,
     )
+    return sys_content, user_prompt
+
+
+def parse_layout_plan_response(raw: str, pages: list, style: dict) -> list:
+    """
+    解析布局规划模型输出，统一补齐缺失页与 mixed 模式字段。
+    """
+    is_mixed = style.get("mixed", False)
+    m = re.search(r'\[.*\]', raw, re.DOTALL)
+    if not m:
+        raise ValueError(f"AI 返回内容中未找到 JSON 数组:\n{raw}")
+    intents = json.loads(m.group())
+
+    page_nums = {p["page_number"] for p in pages}
+    result = []
+    for item in intents:
+        if "page" not in item or "layout_intent" not in item:
+            raise ValueError(f"AI 返回格式错误: {item}")
+        if item["page"] not in page_nums:
+            raise ValueError(f"AI 返回了未知页码: {item['page']}")
+        entry = {"page": item["page"], "layout_intent": item["layout_intent"]}
+        if is_mixed:
+            ca = item.get("contrast_affinity", 0)
+            entry["contrast_affinity"] = max(0, min(2, int(ca)))
+        result.append(entry)
+
+    returned = {r["page"] for r in result}
+    for p in pages:
+        if p["page_number"] not in returned:
+            entry = {"page": p["page_number"], "layout_intent": _fallback_intent(p)}
+            if is_mixed:
+                entry["contrast_affinity"] = 0
+            result.append(entry)
+
+    result.sort(key=lambda x: x["page"])
+    return result
+
+def plan_layout(pages: list, style: dict) -> list:
+    """
+    调用 AI 为所有页面规划布局意图。
+    返回：[{"page": N, "layout_intent": "...", "contrast_affinity": 0-2}, ...]
+    当 style 含 mixed=True 时，AI 会额外输出每页的反差适宜度评分。
+    """
+    is_mixed = style.get("mixed", False)
+    sys_content, user_prompt = build_layout_plan_prompts(pages, style)
 
     try:
         client, cfg = _get_sync_client()
@@ -152,40 +194,7 @@ def plan_layout(pages: list, style: dict) -> list:
         )
         raw = resp.choices[0].message.content.strip()
 
-        # 提取 JSON（兼容 AI 在 ```json``` 块里输出的情况）
-        m = re.search(r'\[.*\]', raw, re.DOTALL)
-        if not m:
-            raise ValueError(f"AI 返回内容中未找到 JSON 数组:\n{raw}")
-        intents = json.loads(m.group())
-
-        # 校验格式
-        page_nums = {p["page_number"] for p in pages}
-        result = []
-        for item in intents:
-            if "page" not in item or "layout_intent" not in item:
-                raise ValueError(f"AI 返回格式错误: {item}")
-            if item["page"] not in page_nums:
-                raise ValueError(f"AI 返回了未知页码: {item['page']}")
-            entry = {"page": item["page"], "layout_intent": item["layout_intent"]}
-            # 解析 AI 返回的反差适宜度（仅 mixed 模式）
-            if is_mixed:
-                ca = item.get("contrast_affinity", 0)
-                entry["contrast_affinity"] = max(0, min(2, int(ca)))
-            result.append(entry)
-
-        # 若 AI 漏了某页，用兜底填充
-        returned = {r["page"] for r in result}
-        for p in pages:
-            if p["page_number"] not in returned:
-                entry = {
-                    "page": p["page_number"],
-                    "layout_intent": _fallback_intent(p),
-                }
-                if is_mixed:
-                    entry["contrast_affinity"] = 0
-                result.append(entry)
-
-        result.sort(key=lambda x: x["page"])
+        result = parse_layout_plan_response(raw, pages, style)
 
         if is_mixed:
             ca_summary = ", ".join(f"P{r['page']}:CA{r.get('contrast_affinity', 0)}" for r in result)
@@ -200,4 +209,3 @@ def plan_layout(pages: list, style: dict) -> list:
              **({"contrast_affinity": 0} if is_mixed else {})}
             for p in pages
         ]
-

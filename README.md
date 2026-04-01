@@ -3,10 +3,13 @@
 将 `.docx` 文档转换为高保真 PPT，支持多种风格和导出模式。
 
 > 这是一个 [OpenClaw（小龙虾）](https://openclaw.ai) Skill，安装后可在 OpenClaw 对话中通过 `/prism` 命令使用。
+>
+> 默认优先使用宿主 OpenClaw 会话当前的大模型进行推理；也支持用户单独配置 OpenAI-compatible API。
 
 ## ✨ 功能特点
 
 - **AI 驱动**：基于大语言模型自动分析内容、规划布局、生成幻灯片
+- **宿主优先**：默认复用当前 OpenClaw 会话的大模型，避免绑定特定 API 厂商
 - **高保真还原**：支持图片版（100% 视觉还原）和可编辑版（文字/布局可编辑）两种导出
 - **4 种风格**：深色 / 浅色 / 深色主导混合 / 浅色主导混合
 - **智能排版**：自动识别内容类型（数据页、时间线、对比等），选择最佳布局
@@ -20,7 +23,7 @@
 /skill install github:chuanmu6809/prism-openclaw-skill
 ```
 
-首次使用时运行 `/prism config` 完成配置。
+首次使用时运行 `/prism config` 完成配置。推荐选择“使用当前龙虾会话的大模型”。
 
 ## 🚀 使用方法
 
@@ -28,6 +31,11 @@
 2. 选择 PPT 风格（或使用默认风格）
 3. 等待 AI 生成（约 3-8 分钟）
 4. 收到两个版本的 PPTX 文件
+
+### 推理模式
+
+- **宿主模式（默认）**：由 OpenClaw 当前会话的大模型负责布局规划和 HTML 生成
+- **自定义 API 模式**：由 Prism 内置的 OpenAI-compatible 客户端完成推理
 
 ### 可用命令
 
@@ -68,6 +76,42 @@
 - LLM API（OpenAI 兼容协议）
 
 依赖会在首次使用时通过 `setup.sh` 自动安装。
+
+如果 `python3 prism_cli.py --check-deps` 显示 `playwright_chromium = MISSING`，说明 Playwright 浏览器本体还没装好。执行：
+
+```bash
+python3 -m playwright install chromium
+```
+
+在 Linux 服务器上，如仍失败，可先执行：
+
+```bash
+python3 -m playwright install-deps chromium
+python3 -m playwright install chromium
+```
+
+## Host 模式下的 CLI 分阶段命令
+
+为了适配更多 OpenClaw 实例，Prism CLI 现在支持将工作流拆成多个可编排步骤：
+
+```bash
+# 1) 解析 docx，产出 pages.json 和图片资源
+python3 prism_cli.py --parse-docx --input slides.docx --work-dir ./work
+
+# 2) 导出布局规划 prompt bundle（交给宿主模型推理）
+python3 prism_cli.py --emit-layout-plan --work-dir ./work --style xiaomi-dark
+
+# 3) 导出单页 HTML prompt bundle（逐页交给宿主模型推理）
+python3 prism_cli.py --emit-page-prompt --work-dir ./work --style xiaomi-dark --page 1 --intents-file ./work/intents.json
+
+# 4) 组装完整 HTML
+python3 prism_cli.py --assemble-html --work-dir ./work --style xiaomi-dark
+
+# 5) 从 work_dir 导出最终 PPT
+python3 prism_cli.py --export-from-workdir --work-dir ./work --style xiaomi-dark --export both --output-dir ./output
+```
+
+这样 Skill 可以默认复用宿主模型，同时保留现有的一体化自定义 API 流程。
 
 ## 📁 项目结构
 

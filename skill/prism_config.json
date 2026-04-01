@@ -1,5 +1,5 @@
 {
-  "api_mode": "openclaw",
+  "api_mode": "host",
   "custom_api_key": "",
   "custom_base_url": "",
   "custom_model": "",
