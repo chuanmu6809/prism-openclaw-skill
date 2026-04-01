@@ -47,6 +47,11 @@
 - 在图片前写 `[背景]` 将其设为全屏背景图
 - 使用分隔线 `---` 精确控制图文配对关系
 
+### 📄 示例文档
+
+- [新款 SU7 全面解析](https://mi.feishu.cn/wiki/Dt6zwzKFciIw5mkYlr0cQcSVnAb)
+- [OpenClaw 介绍](https://mi.feishu.cn/wiki/KKuTwmQEaiXUV0kWEybcwwbrnGg)
+
 ## 🎨 可用风格
 
 | 风格 ID | 说明 |
