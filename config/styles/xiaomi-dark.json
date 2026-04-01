@@ -1,0 +1,41 @@
+{
+  "id": "xiaomi-dark",
+  "name": "基础暗色",
+  "sort_order": 3,
+  "colors": {
+    "bg": "#010A28",
+    "surface": "#0F2675",
+    "surface2": "#091B56",
+    "shape_fill": "#D1E1F9",
+    "text": "#FFFFFF",
+    "text_body": "#A9CDFF",
+    "text_secondary": "#B7D7FF",
+    "accent": "#0066FD",
+    "accent2": "#FF6900",
+    "accent3": "#1CD9D6"
+  },
+  "typography": {
+    "display_font": "MiSans-Bold",
+    "heading1_font": "MiSans-Bold",
+    "heading2_font": "MiSans-Semibold",
+    "body_font": "MiSans-Regular",
+    "caption_font": "MiSans-Regular",
+    "footnote_font": "MiSans-Light"
+  },
+  "font_sizes": {
+    "display": 48,
+    "heading_1": 32,
+    "heading_2": 22,
+    "body": 15,
+    "caption": 11,
+    "footnote": 8
+  },
+  "font_paths": {
+    "MiSans-Bold": "assets/fonts/MiSans-Bold.ttf",
+    "MiSans-Semibold": "assets/fonts/MiSans-Semibold.ttf",
+    "MiSans-Demibold": "assets/fonts/MiSans-Demibold.ttf",
+    "MiSans-Medium": "assets/fonts/MiSans-Medium.ttf",
+    "MiSans-Regular": "assets/fonts/MiSans-Regular.ttf",
+    "MiSans-Light": "assets/fonts/MiSans-Light.ttf"
+  }
+}
