@@ -1,7 +1,7 @@
 ---
 name: prism
 description: Convert .docx documents to high-fidelity PPT presentations using AI. Supports multiple styles and both image-based and editable export modes.
-metadata: {"openclaw":{"emoji":"🎯","requires":{"bins":["python3"],"env":[]},"primaryEnv":"OPENAI_API_KEY","install":[{"id":"setup","kind":"download","label":"Run Prism setup script","url":"https://github.com/prism-ppt/prism/releases/latest/download/setup.sh"}]}}
+metadata: {"openclaw":{"emoji":"🎯","requires":{"bins":["python3"],"env":[]},"primaryEnv":"OPENAI_API_KEY","install":[{"id":"setup","kind":"download","label":"Run Prism setup script","url":"https://github.com/chuanmu6809/prism-openclaw-skill/releases/latest/download/setup.sh"}]}}
 ---
 
 # Prism — AI PPT Generator

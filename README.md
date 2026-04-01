@@ -17,7 +17,7 @@
 在 OpenClaw 中安装此 Skill：
 
 ```
-/skill install github:prism-ppt/prism
+/skill install github:chuanmu6809/prism-openclaw-skill
 ```
 
 首次使用时运行 `/prism config` 完成配置。
