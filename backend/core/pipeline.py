@@ -14,7 +14,28 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from backend.server.database import DATA_DIR, update_task
+# Skill 模式：不依赖数据库，DATA_DIR 和 update_task 均为兼容 stub
+import tempfile as _tempfile
+
+# CLI/Skill 场景下任务目录由调用方管理，DATA_DIR 仅作兜底备用
+DATA_DIR = os.environ.get("PRISM_DATA_DIR", os.path.join(os.path.expanduser("~"), ".prism", "tasks"))
+
+async def update_task(task_id: str, data: dict):
+    """Skill 模式下的空实现，原 Web 数据库写入在此静默忽略。"""
+    # 将状态写入任务目录下的 meta.json，方便调试
+    task_dir = os.path.join(DATA_DIR, task_id)
+    if os.path.isdir(task_dir):
+        meta_path = os.path.join(task_dir, "meta.json")
+        try:
+            meta = {}
+            if os.path.exists(meta_path):
+                with open(meta_path, "r", encoding="utf-8") as _f:
+                    meta = json.load(_f)
+            meta.update(data)
+            with open(meta_path, "w", encoding="utf-8") as _f:
+                json.dump(meta, _f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
 
 from backend.core.paths import CONFIG_DIR
 
@@ -447,7 +468,7 @@ async def run_pipeline(task_id: str, style_name: str):
             thumb_path = os.path.join(task_dir, "thumbnail.png")
             await asyncio.to_thread(_generate_thumbnail, task_id, task_dir, thumb_path)
         except Exception:
-            pass  # 缩略图失败不影响主流程
+            pass  # 缩略图失败不影响主流程（Skill 模式下 routes 模块不存在，跳过即可）
 
         # 清理源文件节省磁盘空间（内容已提取到 images/ 和 pages.json）
         source_docx = os.path.join(task_dir, "source.docx")
@@ -479,10 +500,16 @@ async def retry_page(task_id: str, page_idx: int, keep_layout: bool = False):
     if page_idx < 0 or page_idx >= len(pages):
         raise ValueError(f"page_idx {page_idx} out of range")
     
-    # Load style from task
-    from backend.server.database import get_task
-    task = await get_task(task_id)
-    style_name = task.get("style", "xiaomi-dark")
+    # Load style from task meta.json（Skill 模式下无数据库，直接读文件）
+    meta_path = os.path.join(task_dir, "meta.json")
+    style_name = "xiaomi-dark"
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path, "r", encoding="utf-8") as _f:
+                _meta = json.load(_f)
+            style_name = _meta.get("style", "xiaomi-dark")
+        except Exception:
+            pass
     style_path = CONFIG_DIR / "styles" / f"{style_name}.json"
     style = json.loads(style_path.read_text(encoding="utf-8"))
     
